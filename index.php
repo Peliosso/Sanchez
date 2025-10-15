@@ -4,9 +4,9 @@ $website = "https://api.telegram.org/bot".$token;
 
 $update = json_decode(file_get_contents("php://input"), TRUE);
 $chat_id = $update["message"]["chat"]["id"] ?? null;
-$text = $update["message"]["text"] ?? null;
+$text = trim($update["message"]["text"] ?? "");
 
-// Função para enviar mensagens
+// Função genérica de envio
 function sendMessage($chat_id, $text, $reply_markup = null){
     global $website;
     $data = [
@@ -14,66 +14,91 @@ function sendMessage($chat_id, $text, $reply_markup = null){
         'text' => $text,
         'parse_mode' => 'Markdown'
     ];
-    if($reply_markup) $data['reply_markup'] = json_encode($reply_markup);
-    file_get_contents($GLOBALS['website']."/sendMessage?".http_build_query($data));
+    if ($reply_markup) $data['reply_markup'] = json_encode($reply_markup);
+    file_get_contents($website."/sendMessage?".http_build_query($data));
 }
 
-// Função para criar teclado com botões
 function getKeyboard($buttons){
     return [
         'keyboard' => $buttons,
         'resize_keyboard' => true,
-        'one_time_keyboard' => true
+        'one_time_keyboard' => false
     ];
 }
 
-// Teclado inicial
-if($text == "/start"){
-    $keyboard = getKeyboard([["📍 Consultar CEP"], ["🏢 Consultar CNPJ"]]);
-    sendMessage($chat_id, "🔥 *Bem-vindo ao Bot de Consultas!* Escolha uma opção:", $keyboard);
+// MENU PRINCIPAL
+if ($text == "/start" || $text == "🔙 Voltar ao menu") {
+    $keyboard = getKeyboard([
+        ["📊 Consultas"],
+    ]);
+    sendMessage($chat_id, "👋 *Bem-vindo ao Sanchez Search!*\n\nEscolha uma das opções abaixo para começar:", $keyboard);
 }
 
-// Consulta CEP
-elseif(preg_match("/^\d{5}-?\d{3}$/", $text)){
+// SUBMENU CONSULTAS
+elseif ($text == "📊 Consultas") {
+    $keyboard = getKeyboard([
+        ["📍 Consultar CEP", "🏢 Consultar CNPJ"],
+        ["🔙 Voltar ao menu"]
+    ]);
+    sendMessage($chat_id, "🔎 *Escolha o tipo de consulta que deseja realizar:*", $keyboard);
+}
+
+// EXPLICA CONSULTA CEP
+elseif ($text == "📍 Consultar CEP" || $text == "/cep") {
+    $keyboard = getKeyboard([["🔙 Voltar ao menu"]]);
+    $msg = "📦 *Consulta de CEP*\n\nDigite o CEP no formato `00000-000` para descobrir:\n- Logradouro\n- Bairro\n- Cidade\n- UF\n\n_Envie agora o CEP que deseja consultar._";
+    sendMessage($chat_id, $msg, $keyboard);
+}
+
+// EXPLICA CONSULTA CNPJ
+elseif ($text == "🏢 Consultar CNPJ" || $text == "/cnpj") {
+    $keyboard = getKeyboard([["🔙 Voltar ao menu"]]);
+    $msg = "🏢 *Consulta de CNPJ*\n\nEnvie o número do CNPJ com 14 dígitos (somente números).\nO sistema retornará:\n- Nome e Fantasia\n- Endereço\n- Telefone e Atividade principal";
+    sendMessage($chat_id, $msg, $keyboard);
+}
+
+// CONSULTA CEP REAL
+elseif (preg_match("/^\d{5}-?\d{3}$/", $text)) {
     $cep = preg_replace("/[^0-9]/", "", $text);
     $json = file_get_contents("https://viacep.com.br/ws/$cep/json/");
     $data = json_decode($json, true);
 
-    if(isset($data['erro'])){
-        sendMessage($chat_id, "❌ CEP inválido ou não encontrado.");
+    if (isset($data['erro'])) {
+        sendMessage($chat_id, "❌ *CEP inválido ou não encontrado.*\n\nTente novamente com outro número.");
     } else {
-        $msg = "📍 *CEP:* ".$data['cep']."\n".
-               "🏠 *Logradouro:* ".$data['logradouro']."\n".
-               "🏘️ *Bairro:* ".$data['bairro']."\n".
-               "🌆 *Cidade:* ".$data['localidade']."\n".
-               "🏴 *UF:* ".$data['uf'];
+        $msg = "✅ *Resultado da consulta de CEP:*\n\n".
+               "📍 *CEP:* `{$data['cep']}`\n".
+               "🏠 *Logradouro:* {$data['logradouro']}\n".
+               "🏘️ *Bairro:* {$data['bairro']}\n".
+               "🌆 *Cidade:* {$data['localidade']}\n".
+               "🏴 *UF:* {$data['uf']}";
         sendMessage($chat_id, $msg);
     }
 }
 
-// Consulta CNPJ
-elseif(preg_match("/^\d{14}$/", preg_replace("/[^0-9]/", "", $text))){
+// CONSULTA CNPJ REAL
+elseif (preg_match("/^\d{14}$/", preg_replace("/[^0-9]/", "", $text))) {
     $cnpj = preg_replace("/[^0-9]/", "", $text);
-    $json = file_get_contents("https://www.receitaws.com.br/v1/cnpj/$cnpj");
+    $json = @file_get_contents("https://www.receitaws.com.br/v1/cnpj/$cnpj");
     $data = json_decode($json, true);
 
-    if(isset($data['status']) && $data['status'] != "OK"){
-        sendMessage($chat_id, "❌ CNPJ inválido ou não encontrado.");
+    if (!isset($data['status']) || $data['status'] != "OK") {
+        sendMessage($chat_id, "❌ *CNPJ inválido ou não encontrado.*\n\nVerifique se o número está correto.");
     } else {
-        $msg = "🏢 *Nome:* ".$data['nome']."\n".
-               "📄 *CNPJ:* ".$data['cnpj']."\n".
-               "🏢 *Fantasia:* ".$data['fantasia']."\n".
-               "📍 *Logradouro:* ".$data['logradouro'].", ".$data['numero']."\n".
-               "🏘️ *Bairro:* ".$data['bairro']."\n".
-               "🌆 *Cidade/UF:* ".$data['municipio']."/".$data['uf']."\n".
-               "📞 *Telefone:* ".$data['telefone']."\n".
-               "💻 *Site:* ".$data['atividade_principal'][0]['text'];
+        $msg = "✅ *Resultado da consulta de CNPJ:*\n\n".
+               "🏢 *Nome:* {$data['nome']}\n".
+               "💼 *Fantasia:* {$data['fantasia']}\n".
+               "🧾 *CNPJ:* `{$data['cnpj']}`\n".
+               "📍 *Endereço:* {$data['logradouro']}, {$data['numero']} - {$data['bairro']}\n".
+               "🌆 *Cidade/UF:* {$data['municipio']}/{$data['uf']}\n".
+               "📞 *Telefone:* {$data['telefone']}\n".
+               "💻 *Atividade:* {$data['atividade_principal'][0]['text']}";
         sendMessage($chat_id, $msg);
     }
 }
 
-// Mensagem caso não entenda
-else{
-    sendMessage($chat_id, "⚠️ Envie um CEP válido (00000-000) ou um CNPJ válido (14 números).");
+// QUALQUER OUTRO TEXTO
+else {
+    sendMessage($chat_id, "ℹ️ Não entendi...\n\nUse /start para voltar ao menu principal.");
 }
 ?>
