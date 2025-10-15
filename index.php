@@ -39,23 +39,6 @@ function animateMessage($chat_id, $msg_id, $steps, $delay=1){
     }
 }
 
-function sendTxtFile($chat_id, $filename, $content){
-    global $website;
-    file_put_contents($filename, $content);
-    $data = [
-        'chat_id' => $chat_id,
-        'document' => new CURLFile($filename)
-    ];
-    $ch = curl_init();
-    curl_setopt($ch, CURLOPT_URL, $GLOBALS['website']."/sendDocument");
-    curl_setopt($ch, CURLOPT_POST, 1);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_exec($ch);
-    curl_close($ch);
-    unlink($filename); // remove arquivo após envio
-}
-
 // === /START ===
 if($text=="/start"){
     $keyboard=[
@@ -103,59 +86,51 @@ elseif($data){
     exit;
 }
 
-// === /CEP com txt ===
+// === /CEP ===
 elseif(preg_match("/^\/cep\s+(\d{5}-?\d{3})$/",$text,$m)){
     $cep=preg_replace("/[^0-9]/","",$m[1]);
     $msg=sendMessage($chat_id,"*💭 Consultando...*");
     $msg_id=$msg['result']['message_id'];
-
-    animateMessage($chat_id,$msg_id,["💭 Consultando...","📂 Lendo base de dados...","✅ Resultado pronto!"],1);
+    // animação temática
+    animateMessage($chat_id,$msg_id,["💭 Consultando...","📂 Lendo base de dados...","✅ Resultado encontrado!"],1);
 
     $json=@file_get_contents("https://viacep.com.br/ws/$cep/json/");
     $data=json_decode($json,true);
-
     if(isset($data['erro'])){
         editMessage($chat_id,$msg_id,"❌ *CEP inválido ou não encontrado.*");
     }else{
-        $txt="✅ Resultado da consulta de CEP:\n\n".
-             "CEP: {$data['cep']}\n".
-             "Logradouro: {$data['logradouro']}\n".
-             "Bairro: {$data['bairro']}\n".
-             "Cidade: {$data['localidade']}\n".
-             "UF: {$data['uf']}\n\n🔹 _powered by Sanchez Search_";
-
-        $filename="cep_{$cep}.txt";
-        sendTxtFile($chat_id,$filename,$txt);
-        editMessage($chat_id,$msg_id,"✅ *Consulta finalizada!* Arquivo enviado em anexo 📄");
+        $res="✅ *Resultado da consulta de CEP:*\n\n".
+             "📍 *CEP:* `{$data['cep']}`\n".
+             "🏠 *Logradouro:* {$data['logradouro']}\n".
+             "🏘️ *Bairro:* {$data['bairro']}\n".
+             "🌆 *Cidade:* {$data['localidade']}\n".
+             "🏴 *UF:* {$data['uf']}\n\n🔹 _powered by Sanchez Search_";
+        editMessage($chat_id,$msg_id,$res);
     }
 }
 
-// === /CNPJ com txt ===
+// === /CNPJ ===
 elseif(preg_match("/^\/cnpj\s+(\d{14})$/",$text,$m)){
     $cnpj=$m[1];
     $msg=sendMessage($chat_id,"*💭 Consultando...*");
     $msg_id=$msg['result']['message_id'];
-
-    animateMessage($chat_id,$msg_id,["💭 Consultando...","📂 Lendo base da Receita Federal...","✅ Resultado pronto!"],1);
+    // animação temática
+    animateMessage($chat_id,$msg_id,["💭 Consultando...","📂 Lendo base da Receita Federal...","✅ Resultado encontrado!"],1);
 
     $json=@file_get_contents("https://www.receitaws.com.br/v1/cnpj/$cnpj");
     $data=json_decode($json,true);
-
     if(!isset($data['status']) || $data['status']!="OK"){
         editMessage($chat_id,$msg_id,"❌ *CNPJ inválido ou não encontrado.*");
     }else{
-        $txt="✅ Resultado da consulta de CNPJ:\n\n".
-             "Nome: {$data['nome']}\n".
-             "Fantasia: {$data['fantasia']}\n".
-             "CNPJ: {$data['cnpj']}\n".
-             "Endereço: {$data['logradouro']}, {$data['numero']} - {$data['bairro']}\n".
-             "Cidade/UF: {$data['municipio']}/{$data['uf']}\n".
-             "Telefone: {$data['telefone']}\n".
-             "Atividade: {$data['atividade_principal'][0]['text']}\n\n🔹 _powered by Sanchez Search_";
-
-        $filename="cnpj_{$cnpj}.txt";
-        sendTxtFile($chat_id,$filename,$txt);
-        editMessage($chat_id,$msg_id,"✅ *Consulta finalizada!* Arquivo enviado em anexo 📄");
+        $res="✅ *Resultado da consulta de CNPJ:*\n\n".
+             "🏢 *Nome:* {$data['nome']}\n".
+             "💼 *Fantasia:* {$data['fantasia']}\n".
+             "🧾 *CNPJ:* `{$data['cnpj']}`\n".
+             "📍 *Endereço:* {$data['logradouro']}, {$data['numero']} - {$data['bairro']}\n".
+             "🌆 *Cidade/UF:* {$data['municipio']}/{$data['uf']}\n".
+             "📞 *Telefone:* {$data['telefone']}\n".
+             "💻 *Atividade:* {$data['atividade_principal'][0]['text']}\n\n🔹 _powered by Sanchez Search_";
+        editMessage($chat_id,$msg_id,$res);
     }
 }
 
