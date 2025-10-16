@@ -122,6 +122,48 @@ elseif($data){
     exit;
 }
 
+// === /CPF com .txt (usando CPFHub) ===
+elseif(preg_match("/^\/cpf\s+(\d{11})$/",$text,$m)){
+    $cpf = $m[1];
+    $msg = sendMessage($chat_id,"*💭 Consultando CPF...*");
+    $msg_id = $msg['result']['message_id'];
+    animateMessage($chat_id,$msg_id,[
+        "💭 Consultando CPF...",
+        "📡 Conectando à base CPFHub...",
+        "📂 Lendo informações pessoais...",
+        "✅ Resultado encontrado!"
+    ]);
+
+    $ch = curl_init();
+    curl_setopt_array($ch, [
+        CURLOPT_URL => "https://api.cpfhub.io/cpf/$cpf",
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER => [
+            "x-api-key: bbcb1daa240f12c668fb2da2127f5ed93e67b0b75be1413da8d4b1ddabb05c00"
+        ]
+    ]);
+    $response = curl_exec($ch);
+    curl_close($ch);
+
+    $data = json_decode($response, true);
+
+    if(!$data || !$data['success'] || empty($data['data'])){
+        editMessage($chat_id,$msg_id,"❌ *CPF inválido ou não encontrado.*");
+    } else {
+        $info = $data['data'];
+        $txt = "✅ Resultado da consulta de CPF:\n\n".
+               "CPF: {$info['cpf']}\n".
+               "Nome: {$info['name']}\n".
+               "Nome (MAIÚSCULO): {$info['nameUpper']}\n".
+               "Sexo: ".($info['gender']=='M'?'Masculino':'Feminino')."\n".
+               "Data de Nascimento: {$info['birthDate']}\n".
+               "Ano: {$info['year']} | Mês: {$info['month']} | Dia: {$info['day']}\n\n".
+               "🔹 _powered by Sanchez Search & CPFHub_";
+        sendTxtFile($chat_id,"cpf_{$cpf}.txt",$txt);
+        editMessage($chat_id,$msg_id,"✅ *Consulta finalizada!* Arquivo enviado em anexo 📄");
+    }
+}
+
 // === /CEP com .txt ===
 elseif(preg_match("/^\/cep\s+(\d{5}-?\d{3})$/",$text,$m)){
     $cep = preg_replace("/[^0-9]/","",$m[1]);
